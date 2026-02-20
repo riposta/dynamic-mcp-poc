@@ -1,11 +1,11 @@
-"""Google ADK Agent that uses the MCP Gateway"""
+"""Google ADK Agent that uses the MCP Gateway with auth token propagation"""
 from google.adk.agents import Agent
 from google.adk.models.lite_llm import LiteLlm
 import os
 from dotenv import load_dotenv
 import logging
 
-from google.adk.tools.mcp_tool import StreamableHTTPConnectionParams, MCPToolset
+from google.adk.tools.mcp_tool import StreamableHTTPConnectionParams, McpToolset
 
 logging.basicConfig(
     level=logging.INFO,
@@ -15,12 +15,19 @@ logger = logging.getLogger(__name__)
 
 load_dotenv()
 
-# LiteLLM model configuration
 MODEL_NAME = os.getenv('MODEL_NAME', 'vertex_ai/gemini-2.5-flash')
-MCP_URL = os.getenv('MCP_URL', 'http://localhost:8010')
+MCP_URL = os.getenv('MCP_URL', 'http://localhost:8010/mcp')
 
 
-# Initialize MCP Toolset with error handling
+def _header_provider(readonly_context):
+    """Provide Authorization header with the current user's Keycloak token"""
+    # Import here to avoid circular imports at module load time
+    from agent.web import current_token
+    if current_token:
+        return {"Authorization": f"Bearer {current_token}"}
+    return {}
+
+
 mcp_toolset = None
 
 try:
@@ -30,15 +37,15 @@ try:
         sse_read_timeout=300
     )
 
-    mcp_toolset = MCPToolset(
-        connection_params=connection_params
+    mcp_toolset = McpToolset(
+        connection_params=connection_params,
+        header_provider=_header_provider,
     )
     logger.info(f"MCP Toolset initialized successfully - Connected to {MCP_URL}")
 except Exception as e:
     logger.error(f"Could not initialize MCP Toolset: {e}")
     logger.warning("Agent will be created with debug tools only. Check if gateway is running.")
 
-# Create the agent with conditional tools
 root_agent = Agent(
     name="mcp_gateway_agent",
     model=LiteLlm(model=MODEL_NAME),
@@ -47,11 +54,6 @@ root_agent = Agent(
     ),
     instruction=("""
         You are a helpful AI assistant with access to various tools through the Model Context Protocol (MCP).
-
-        <DEBUGGING_TOOLS>
-
-        Use these when troubleshooting connection issues or exploring available capabilities.
-        </DEBUGGING_TOOLS>
 
         <APPROACH>
 

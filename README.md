@@ -1,180 +1,222 @@
-# MCP Gateway - Dynamic Tool Discovery PoC
+# MCP Gateway -- Authenticated Dynamic Tool Discovery
 
-A Proof of Concept demonstrating dynamic MCP (Model Context Protocol) tool discovery using Google Agent Development Kit (ADK) and FastMCP.
+A Proof of Concept demonstrating an authenticated MCP (Model Context Protocol) gateway with Keycloak, RFC 8693 token exchange, and dynamic per-session tool discovery.
 
-## Overview
+## What This Does
 
-This project implements a dynamic MCP gateway system where:
-
-1. **MCP Gateway** starts with minimal tools (search and enable)
-2. **ADK Agent** can discover available MCP servers
-3. **Dynamic Loading** - when a server is enabled, its tools become immediately available
-4. **No restart required** - tools appear in the gateway automatically
-
-## Architecture
+An AI agent connects to a single MCP gateway. The gateway lets the agent discover and activate tool servers on demand. Every hop is authenticated -- the user logs in via Keycloak, the gateway exchanges their token for server-specific tokens, and each MCP server validates its own scoped token.
 
 ```
-┌─────────────────┐
-│  ADK Agent      │
-│  (Google ADK)   │
-└────────┬────────┘
-         │
-         │ HTTP/SSE (port 8010)
-         │ MCP Protocol
-         ▼
-┌─────────────────┐
-│  MCP Gateway    │
-│  (FastMCP/SSE)  │
-│                 │
-│  Initial Tools: │
-│  - search_servers
-│  - enable_server
-└────────┬────────┘
-         │
-         │ Dynamic Loading
-         ▼
-┌─────────────────────────────┐
-│  Simulated MCP Servers:     │
-│  - weather (2 tools)        │
-│  - database (2 tools)       │
-│  - calculator (1 tool)      │
-└─────────────────────────────┘
+User (browser)
+  │
+  │  Keycloak OIDC login (PKCE)
+  ▼
+Web Frontend + ADK Agent (:8000)
+  │
+  │  Bearer token (aud: mcp-gateway)
+  ▼
+MCP Gateway (:8010)
+  │
+  │  Token exchange (RFC 8693)
+  ▼
+MCP Servers (:8011, :8012)
+  Each validates its own scoped token (aud: mcp-weather, mcp-calculator)
 ```
 
-## Setup
+Key features:
 
-### 1. Activate Virtual Environment
+- **Dynamic tool discovery** -- agent calls `search_servers` / `enable_server` at runtime
+- **Per-session isolation** -- servers activated in one session are not visible in another
+- **Token exchange** -- gateway swaps user tokens for server-specific tokens via Keycloak
+- **Per-user access control** -- Keycloak roles determine which servers each user can access
+- **No code changes to add servers** -- just add a YAML entry and a Keycloak client
+
+## Prerequisites
+
+- Python 3.13+
+- Docker (for Keycloak)
+- Node.js 18+ (for BDD tests)
+- An LLM API key (Vertex AI, Google AI Studio, or OpenAI)
+
+## Quick Start
+
+### 1. Clone and set up Python environment
 
 ```bash
+python -m venv .venv
 source .venv/bin/activate
-```
-
-### 2. Install Dependencies
-
-```bash
 pip install -r requirements.txt
 ```
 
-### 3. Configure Environment Variables
-
-Copy the example environment file and configure it:
+### 2. Configure environment
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` to set your configuration:
-```bash
-# Model configuration (using Vertex AI / Gemini)
-MODEL_NAME=vertex_ai/gemini-2.0-flash
+Edit `.env` -- the key setting is `MODEL_NAME`:
 
-# Or use Google AI Studio with API key
-# MODEL_NAME=gemini/gemini-2.0-flash
-# GOOGLE_API_KEY=your-api-key-here
+```bash
+# Vertex AI (default, requires gcloud auth)
+MODEL_NAME=vertex_ai/gemini-2.5-flash
+
+# Or Google AI Studio (requires API key)
+MODEL_NAME=gemini/gemini-2.0-flash
+GOOGLE_API_KEY=your-key-here
 ```
 
-Get your API key from: https://aistudio.google.com/apikey
-
-## Usage
-
-### Option 1: Run with ADK Web Interface (Recommended)
-
-The agent uses Google ADK's web interface and connects to the MCP Gateway via HTTP/SSE:
+### 3. Start everything
 
 ```bash
-# First, start the MCP Gateway in a separate terminal (runs on port 8010)
+make up
+```
+
+This starts all services in order: Keycloak, configures token exchange permissions, MCP servers, gateway, and the web UI. It waits for each component to be ready before starting the next.
+
+### 4. Open the web UI
+
+Go to **http://localhost:8000** and click **Login with Keycloak**.
+
+Test users:
+
+| User | Password | Access |
+|------|----------|--------|
+| `testuser` | `testpass` | Weather + Calculator |
+| `limiteduser` | `testpass` | Weather only |
+
+After login you'll be redirected to the ADK chat UI. Ask the agent to find and use available tools.
+
+## Make Commands
+
+| Command | Description |
+|---------|-------------|
+| `make up` | Start all services (Keycloak, servers, gateway, web UI) |
+| `make down` | Stop everything |
+| `make status` | Check which services are running |
+| `make logs` | Tail all service logs |
+| `make test` | Run BDD test suite |
+| `make test-smoke` | Run smoke tests only |
+| `make test-install` | Install BDD test dependencies |
+
+## Running Services Individually
+
+If you prefer to start components in separate terminals:
+
+```bash
+# Terminal 1: Keycloak
+docker compose up -d
+# Wait for Keycloak to be ready (~30s), then configure permissions:
+bash keycloak/setup-permissions.sh
+
+# Terminal 2: Weather server
+source .venv/bin/activate
+python servers/weather_server.py
+
+# Terminal 3: Calculator server
+source .venv/bin/activate
+python servers/calculator_server.py
+
+# Terminal 4: Gateway
+source .venv/bin/activate
 python gateway/server.py
 
-# Then run the agent with adk-web
-adk-web agent.main:root_agent
+# Terminal 5: Web UI
+source .venv/bin/activate
+python agent/web.py
 ```
 
-The MCP Gateway will start on `http://localhost:8010` by default.
+## Port Map
 
-This will open a web interface where you can interact with the agent. The agent will automatically:
-1. Connect to the MCP Gateway over HTTP
-2. Discover available MCP servers
-3. Enable servers as needed
-4. Use tools from enabled servers dynamically
-
-### Option 2: Test Gateway Directly
-
-You can test the MCP gateway server directly:
-
-```bash
-# Run with default port (8010)
-python gateway/server.py
-
-# Or specify a custom port
-MCP_PORT=8080 python gateway/server.py
-```
-
-The gateway exposes its tools via HTTP/SSE on the specified port.
-
-## Available Simulated Servers
-
-### Weather Server
-- `get_weather(location)` - Get current weather
-- `get_forecast(location, days)` - Get weather forecast
-
-### Database Server
-- `query_db(query)` - Execute SQL query
-- `list_tables()` - List all tables
-
-### Calculator Server
-- `calculate(expression)` - Perform math calculations
+| Port | Component |
+|------|-----------|
+| 8080 | Keycloak (admin: `admin` / `admin`) |
+| 8010 | MCP Gateway |
+| 8011 | Weather MCP Server |
+| 8012 | Calculator MCP Server |
+| 8000 | Web Frontend + ADK Agent UI |
 
 ## How It Works
 
-### Gateway Startup
+1. User logs in via Keycloak (Authorization Code + PKCE)
+2. The access token (audience: `mcp-gateway`) is injected into the agent's MCP calls
+3. Agent calls `search_servers()` to discover available servers
+4. Agent calls `enable_server("weather")` -- the gateway:
+   - Checks the user's role (`access:weather`)
+   - Exchanges the token for one scoped to `mcp-weather`
+   - Connects to the weather server, discovers its tools
+   - Registers proxy tools on the gateway
+5. Agent calls `get_weather("Warsaw")` -- the gateway:
+   - Verifies the server is enabled in this session
+   - Exchanges the token again for a fresh server-scoped token
+   - Forwards the call to the weather server
+   - Returns the result
 
-When the gateway starts:
-- Runs an HTTP server with SSE (Server-Sent Events) on port 8010
-- Exposes MCP protocol over HTTP/SSE
-- Only exposes two initial tools:
-  - `search_servers` - Find available MCP servers
-  - `enable_server` - Enable a specific server
+Each MCP session has its own set of enabled servers. Tools activated in one browser tab don't appear in another.
 
-### Dynamic Tool Discovery Workflow
+## Running BDD Tests
 
-1. **Agent queries available tools** → Gets `search_servers` and `enable_server`
+The project uses Cucumber.js with TypeScript for black-box BDD testing against the running services.
 
-2. **Agent calls `search_servers()`** → Discovers weather, database, calculator servers
+```bash
+# Install test dependencies (once)
+make test-install
 
-3. **Agent calls `enable_server("weather")`** → Gateway loads weather server tools
+# Start all services
+make up
 
-4. **Agent queries tools again** → Now sees `search_servers`, `enable_server`, `get_weather`, `get_forecast`
-
-5. **Agent can now use weather tools** → Calls `get_weather("San Francisco")`
-
-### Key Features
-
-- **HTTP/SSE Transport** - MCP protocol over HTTP with Server-Sent Events
-- **No restart needed** - Tools appear immediately after enabling
-- **Simulated servers** - Uses hardcoded server definitions for PoC
-- **Simple implementation** - Minimal code, no over-engineering
-- **FastMCP dynamic registration** - Tools registered at runtime
-- **ADK Integration** - Works seamlessly with Google Agent Development Kit
+# Run tests
+make test
+```
 
 ## Project Structure
 
 ```
 MCPTest/
 ├── gateway/
-│   └── server.py           # FastMCP gateway with dynamic tools
+│   ├── server.py              # MCP gateway with auth + token exchange + per-session state
+│   └── servers.yaml           # Server registry (name, URL, audience, role)
+├── servers/
+│   ├── weather_server.py      # Weather MCP server (JWT auth)
+│   └── calculator_server.py   # Calculator MCP server (JWT auth)
 ├── agent/
-│   ├── __init__.py         # Package exports
-│   ├── main.py             # Google ADK agent (root_agent)
-│   └── tools.py            # MCP gateway tools (search, enable)
-├── requirements.txt        # Python dependencies
-├── .env.example           # Environment variables template
-└── README.md              # This file
+│   ├── __init__.py            # Exports root_agent
+│   ├── main.py                # ADK agent with MCP toolset + header_provider
+│   └── web.py                 # FastAPI: Keycloak login + ADK Web UI
+├── keycloak/
+│   ├── mcp-poc-realm.json     # Realm config (clients, scopes, mappers, users)
+│   └── setup-permissions.sh   # Configures V1 fine-grained token exchange permissions
+├── tests/bdd/                 # Cucumber.js BDD test suite
+│   ├── features/              # Gherkin scenarios
+│   ├── steps/                 # TypeScript step definitions
+│   └── support/               # World class
+├── doc/
+│   ├── ARCHITECTURE.md        # Architecture overview
+│   ├── IMPLEMENTATION.md      # Implementation details
+│   └── IMPLEMENTATION-BDD.md  # BDD test approach
+├── docker-compose.yml         # Keycloak container
+├── Makefile                   # Service orchestration
+├── requirements.txt           # Python dependencies
+└── .env.example               # Environment template
 ```
+
+## Adding a New MCP Server
+
+1. **Keycloak** -- add a bearer-only client (`mcp-<name>`), an audience scope, and assign it to `mcp-gateway`
+2. **Server code** -- create `servers/<name>_server.py` with `JWTVerifier(audience="mcp-<name>")`
+3. **Gateway config** -- add an entry to `gateway/servers.yaml`
+4. **Restart** the gateway -- no code changes needed in the gateway or agent
+
+See `doc/IMPLEMENTATION.md` section 10 for full details.
+
+## Documentation
+
+- [Architecture](doc/ARCHITECTURE.md) -- component design, trust boundaries, token flow
+- [Implementation](doc/IMPLEMENTATION.md) -- code structure, Keycloak setup, key APIs
+- [BDD Testing](doc/IMPLEMENTATION-BDD.md) -- test approach, scenario catalog
 
 ## Limitations (PoC)
 
-- Simulated MCP servers (not real server connections)
-- Hardcoded server definitions
-- No persistence (state lost on restart)
-- Minimal error handling
-- No authentication/authorization
+- In-memory state only -- lost on restart
+- No token refresh -- user must re-login after token expires (1h)
+- Single-user web session via global variable
+- No TLS -- all traffic is plaintext HTTP

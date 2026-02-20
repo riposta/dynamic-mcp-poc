@@ -35,7 +35,6 @@ env/
 
 # Environment variables
 .env
-.env.example
 
 # Claude Code
 .claude/
@@ -43,6 +42,11 @@ env/
 # ADK
 .adk/
 
+# Runtime
+.pids/
+.logs/
+
 # OS
 .DS_Store
 Thumbs.db
+/tests/bdd/node_modules/

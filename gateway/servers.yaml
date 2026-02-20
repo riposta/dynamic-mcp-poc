@@ -1,0 +1,11 @@
+servers:
+  weather:
+    description: "Weather information service"
+    url: "http://localhost:8011"
+    keycloak_audience: "mcp-weather"
+    required_role: "access:weather"
+  calculator:
+    description: "Mathematical calculator service"
+    url: "http://localhost:8012"
+    keycloak_audience: "mcp-calculator"
+    required_role: "access:calculator"
