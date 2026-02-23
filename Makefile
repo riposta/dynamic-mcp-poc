@@ -10,13 +10,15 @@ LOG_DIR    := .logs
 up: keycloak wait-keycloak setup-keycloak servers wait-servers gateway wait-gateway agent wait-agent info
 
 down:
-	@echo "Stopping gateway and MCP servers..."
-	@if [ -f $(PID_DIR)/agent.pid ]; then kill $$(cat $(PID_DIR)/agent.pid) 2>/dev/null; rm $(PID_DIR)/agent.pid; echo "  Agent stopped"; fi
-	@if [ -f $(PID_DIR)/gateway.pid ]; then kill $$(cat $(PID_DIR)/gateway.pid) 2>/dev/null; rm $(PID_DIR)/gateway.pid; echo "  Gateway stopped"; fi
-	@if [ -f $(PID_DIR)/weather.pid ]; then kill $$(cat $(PID_DIR)/weather.pid) 2>/dev/null; rm $(PID_DIR)/weather.pid; echo "  Weather server stopped"; fi
-	@if [ -f $(PID_DIR)/calculator.pid ]; then kill $$(cat $(PID_DIR)/calculator.pid) 2>/dev/null; rm $(PID_DIR)/calculator.pid; echo "  Calculator server stopped"; fi
-	@rmdir $(PID_DIR) 2>/dev/null || true
-	@rm -rf $(LOG_DIR)
+	@echo "Stopping services..."
+	@for port in 8000 8010 8011 8012; do \
+		pid=$$(lsof -t -i :$$port 2>/dev/null); \
+		if [ -n "$$pid" ]; then \
+			kill $$pid 2>/dev/null; \
+			echo "  Killed PID $$pid on port $$port"; \
+		fi; \
+	done
+	@rm -rf $(PID_DIR) $(LOG_DIR)
 	@echo "Stopping Keycloak..."
 	@docker compose down
 	@echo "All services stopped."
