@@ -795,6 +795,21 @@ Feature: Per-User Token Exchange Authorization
   - testuser: has access:weather + access:calculator roles
   - limiteduser: has access:weather role only
 
+  Rule: Server discovery respects user roles
+
+    Scenario: testuser sees all servers in search results
+      Given I am connected as "testuser"
+      When I call the search_servers tool
+      Then I should receive a list of 2 servers
+      And the response should contain server "weather"
+      And the response should contain server "calculator"
+
+    Scenario: limiteduser only sees authorized servers in search results
+      Given I am connected as "limiteduser"
+      When I call the search_servers tool
+      Then I should receive a list of 1 servers
+      And the response should contain server "weather"
+
   Rule: Full-access user can access all servers
 
     Scenario: testuser can activate weather server
@@ -1077,7 +1092,7 @@ Cucumber generates an HTML report at `tests/bdd/cucumber-report.html` after each
 | security | 7 | 2 |
 | token_exchange | 9 | 1 |
 | end_to_end | 2 | 1 |
-| authorization | 7 | 1 |
-| **Total** | **54** | **9** |
+| authorization | 9 | 1 |
+| **Total** | **56** | **9** |
 
-**Note:** The default Cucumber profile excludes 1 scenario tagged `@pending-mcp-sdk-behavior` (MCP SDK silently reconnects on 401, hiding auth failure) and 1 scenario tagged `@pending`. Effective runnable scenarios: **52**.
+**Note:** The default Cucumber profile excludes 1 scenario tagged `@pending-mcp-sdk-behavior` (MCP SDK silently reconnects on 401, hiding auth failure) and 1 scenario tagged `@pending`. Effective runnable scenarios: **54**.

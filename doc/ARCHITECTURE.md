@@ -125,7 +125,7 @@ Three tools are always available, regardless of session state:
 
 | Tool | Purpose |
 |------|---------|
-| `search_servers` | List available MCP servers from the configuration file. Reports which servers are enabled in the calling session. |
+| `search_servers` | List available MCP servers from the configuration file. Only returns servers the user has access to (based on `required_role` in config vs. user's JWT realm roles). Reports which servers are enabled in the calling session. |
 | `enable_server` | Activate an MCP server for the calling session. Performs token exchange, discovers tools, registers proxies. |
 | `_reset_gateway` | Clear the calling session's state (for test isolation). |
 

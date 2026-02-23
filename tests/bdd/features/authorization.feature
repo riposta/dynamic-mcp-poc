@@ -12,6 +12,21 @@ Feature: Per-User Token Exchange Authorization
   - testuser: has access:weather + access:calculator roles
   - limiteduser: has access:weather role only
 
+  Rule: Server discovery respects user roles
+
+    Scenario: testuser sees all servers in search results
+      Given I am connected as "testuser"
+      When I call the search_servers tool
+      Then I should receive a list of 2 servers
+      And the response should contain server "weather"
+      And the response should contain server "calculator"
+
+    Scenario: limiteduser only sees authorized servers in search results
+      Given I am connected as "limiteduser"
+      When I call the search_servers tool
+      Then I should receive a list of 1 servers
+      And the response should contain server "weather"
+
   Rule: Full-access user can access all servers
 
     Scenario: testuser can activate weather server

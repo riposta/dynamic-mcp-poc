@@ -170,10 +170,8 @@ async def debug_token(request: Request):
     """Check if current token is set (for debugging)"""
     token = _get_token(request)
     return {
-        "session_token_set": token is not None,
-        "global_token_set": current_token is not None,
-        "session_token_length": len(token) if token else 0,
-        "global_token_length": len(current_token) if current_token else 0,
+        "session_token": token,
+        "global_token": current_token,
     }
 
 

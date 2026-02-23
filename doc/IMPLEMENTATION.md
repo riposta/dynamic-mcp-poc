@@ -245,16 +245,28 @@ Key FastMCP APIs:
 
 ### Tool Implementation
 
-Tools are decorated with `@mcp.tool()` and can access the caller's identity via `get_access_token()`:
+Tools are decorated with `@mcp.tool()` and can access the caller's identity via `get_access_token()`. The weather server uses the [Open-Meteo API](https://open-meteo.com/) (free, no API key) for real weather data:
 
 ```python
 @mcp.tool()
-def get_weather(location: str) -> dict:
+async def get_weather(location: str) -> dict:
     """Get current weather for a location"""
     token = get_access_token()
     user = token.claims.get("preferred_username", "unknown") if token else "anonymous"
-    return {"location": location, "temperature": 22, "requested_by": user}
+    geo = await geocode(location)  # Open-Meteo Geocoding API -> lat/lon
+    # Open-Meteo Forecast API -> current weather
+    resp = await http.get(FORECAST_URL, params={
+        "latitude": geo["lat"], "longitude": geo["lon"],
+        "current": "temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m",
+    })
+    current = resp.json()["current"]
+    return {"location": f"{geo['name']}, {geo['country']}", "temperature": current["temperature_2m"], ...}
 ```
+
+Open-Meteo APIs used:
+- **Geocoding**: `https://geocoding-api.open-meteo.com/v1/search?name={location}` -- resolves location name to lat/lon
+- **Forecast**: `https://api.open-meteo.com/v1/forecast?latitude=...&longitude=...` -- returns current weather and daily forecasts
+- WMO weather codes are mapped to human-readable conditions (e.g. code 3 = "Overcast")
 
 The `get_access_token()` call is context-aware -- FastMCP sets up a contextvar per incoming request. The token available here is the exchanged token (scoped to this server's audience), not the user's original token.
 
@@ -379,7 +391,7 @@ Key FastMCP Client APIs:
 
 ### Built-in Tools
 
-**`search_servers(query: str = "", ctx: Context = None)`** -- returns a list of available servers from the YAML config, filtered by query. Indicates which are already enabled in the calling session.
+**`search_servers(query: str = "", ctx: Context = None)`** -- returns a list of available servers from the YAML config, filtered by query. Only returns servers the user has access to -- servers whose `required_role` the user lacks are excluded from results. Indicates which are already enabled in the calling session.
 
 **`enable_server(server_name: str, ctx: Context = None)`** -- activates a server for the calling session. Flow:
 1. Look up server in `AVAILABLE_SERVERS`

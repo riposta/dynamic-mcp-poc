@@ -77,10 +77,14 @@ async def call_mcp_server(server_url: str, tool_name: str, arguments: dict, toke
 
 @mcp.tool()
 def search_servers(query: str = "", ctx: Context = None) -> dict:
-    """Search for available MCP servers"""
+    """Search for available MCP servers (only shows servers the user has access to)"""
     session = enabled_servers.get(ctx.session_id, {}) if ctx else {}
+    access_token = get_access_token()
     results = []
     for name, info in AVAILABLE_SERVERS.items():
+        required_role = info.get("required_role")
+        if required_role and not check_user_role(access_token, required_role):
+            continue
         if query == "" or query.lower() in name.lower() or query.lower() in info["description"].lower():
             results.append({
                 "name": name,
