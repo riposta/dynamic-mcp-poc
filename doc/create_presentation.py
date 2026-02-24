@@ -789,13 +789,13 @@ add_text(slide8, "Kod źródłowy / Demo:", 1.5, 4.8, 10, 0.5, size=16, color=GR
 
 # Repo URL in a styled box
 repo_box = add_box(slide8, 3.5, 5.4, 6.3, 0.7, BG_CARD, CYAN)
-add_text(slide8, "github.com/adam-dabrowski/mcp-gateway-poc", 3.7, 5.45, 5.9, 0.6,
+add_text(slide8, "github.com/riposta/dynamic-mcp-poc", 3.7, 5.45, 5.9, 0.6,
          size=18, color=CYAN, bold=True, align=PP_ALIGN.CENTER, font_name="Consolas")
 
 add_text(slide8, "Pytania?", 1.5, 6.4, 10, 0.6, size=28, color=PURPLE, bold=True, align=PP_ALIGN.CENTER)
 
 # ── Save ────────────────────────────────────────────────────────
 
-output_path = "/Users/adamdabrowski/PycharmProjects/MCPTest/MCP_Gateway_Workshop.pptx"
+output_path = "./MCP_Gateway_Workshop.pptx"
 prs.save(output_path)
 print(f"Presentation saved to: {output_path}")
